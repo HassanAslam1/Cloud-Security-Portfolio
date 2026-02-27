@@ -1,0 +1,154 @@
+Last login: Fri Feb 27 16:33:39 on console
+hassan@Hassans-MacBook-Air ~ % VPC_A_ID=$(aws ec2 create-vpc --cidr-block 10.0.0.0/16 --query 'Vpc.VpcId' --output text) 
+aws ec2 create-tags --resources $VPC_A_ID --tags Key=Name,Value=Trivance-Corp-VPC
+
+# Get the default Route Table for VPC A
+RT_A_ID=$(aws ec2 describe-route-tables --filters Name=vpc-id,Values=$VPC_A_ID --query 'RouteTables[0].RouteTableId' --output text)
+echo "VPC A Created: $VPC_A_ID | Route Table: $RT_A_ID"
+zsh: command not found: #
+VPC A Created: vpc-050d4599e0eee91ac | Route Table: rtb-0a2b4345006f602d4
+hassan@Hassans-MacBook-Air ~ % VPC_B_ID=$(aws ec2 create-vpc --cidr-block 10.1.0.0/16 --query 'Vpc.VpcId' --output text) 
+aws ec2 create-tags --resources $VPC_B_ID --tags Key=Name,Value=Startup-App-VPC
+
+# Get the default Route Table for VPC B
+RT_B_ID=$(aws ec2 describe-route-tables --filters Name=vpc-id,Values=$VPC_B_ID --query 'RouteTables[0].RouteTableId' --output text)
+echo "VPC B Created: $VPC_B_ID | Route Table: $RT_B_ID"
+zsh: command not found: #
+VPC B Created: vpc-088fd785db65580c0 | Route Table: rtb-03b348e2793d0e70f
+hassan@Hassans-MacBook-Air ~ % PEER_ID=$(aws ec2 create-vpc-peering-connection \
+    --vpc-id $VPC_A_ID \
+    --peer-vpc-id $VPC_B_ID \
+    --query 'VpcPeeringConnection.VpcPeeringConnectionId' \
+    --output text)
+echo "Peering Requested: $PEER_ID"
+Peering Requested: pcx-049bc41a4aea2c8e3
+hassan@Hassans-MacBook-Air ~ % aws ec2 accept-vpc-peering-connection --vpc-peering-connection-id $PEER_ID
+{
+    "VpcPeeringConnection": {
+        "AccepterVpcInfo": {
+            "CidrBlock": "10.1.0.0/16",
+            "CidrBlockSet": [
+                {
+                    "CidrBlock": "10.1.0.0/16"
+                }
+            ],
+            "OwnerId": "346151108137",
+            "PeeringOptions": {
+                "AllowDnsResolutionFromRemoteVpc": false,
+                "AllowEgressFromLocalClassicLinkToRemoteVpc": false,
+                "AllowEgressFromLocalVpcToRemoteClassicLink": false
+            },
+            "VpcId": "vpc-088fd785db65580c0",
+            "Region": "us-east-1"
+        },
+        "RequesterVpcInfo": {
+            "CidrBlock": "10.0.0.0/16",
+            "CidrBlockSet": [
+                {
+                    "CidrBlock": "10.0.0.0/16"
+                }
+            ],
+            "OwnerId": "346151108137",
+            "PeeringOptions": {
+                "AllowDnsResolutionFromRemoteVpc": false,
+                "AllowEgressFromLocalClassicLinkToRemoteVpc": false,
+                "AllowEgressFromLocalVpcToRemoteClassicLink": false
+            },
+            "VpcId": "vpc-050d4599e0eee91ac",
+            "Region": "us-east-1"
+        },
+        "Status": {
+            "Code": "provisioning",
+            "Message": "Provisioning"
+        },
+        "Tags": [],
+        "VpcPeeringConnectionId": "pcx-049bc41a4aea2c8e3"
+    }
+}
+hassan@Hassans-MacBook-Air ~ % aws ec2 create-route \
+    --route-table-id $RT_A_ID \
+    --destination-cidr-block 10.1.0.0/16 \
+    --vpc-peering-connection-id $PEER_ID
+{
+    "Return": true
+}
+hassan@Hassans-MacBook-Air ~ % aws ec2 create-route \
+    --route-table-id $RT_B_ID \
+    --destination-cidr-block 10.0.0.0/16 \
+    --vpc-peering-connection-id $PEER_ID
+{
+    "Return": true
+}
+hassan@Hassans-MacBook-Air ~ % aws ec2 create-vpc-endpoint \
+    --vpc-id $VPC_B_ID \
+    --service-name com.amazonaws.us-east-1.s3 \
+    --route-table-ids $RT_B_ID
+{
+    "VpcEndpoint": {
+        "VpcEndpointId": "vpce-09ba0205ec1addee0",
+        "VpcEndpointType": "Gateway",
+        "VpcId": "vpc-088fd785db65580c0",
+        "ServiceName": "com.amazonaws.us-east-1.s3",
+        "State": "available",
+        "PolicyDocument": "{\"Version\":\"2008-10-17\",\"Statement\":[{\"Effect\":\"Allow\",\"Principal\":\"*\",\"Action\":\"*\",\"Resource\":\"*\"}]}",
+        "RouteTableIds": [
+            "rtb-03b348e2793d0e70f"
+        ],
+        "SubnetIds": [],
+        "Groups": [],
+        "IpAddressType": "ipv4",
+        "DnsOptions": {
+            "DnsRecordIpType": "service-defined"
+        },
+        "PrivateDnsEnabled": false,
+        "RequesterManaged": false,
+        "NetworkInterfaceIds": [],
+        "DnsEntries": [],
+        "CreationTimestamp": "2026-02-27T12:13:40+00:00",
+        "OwnerId": "346151108137"
+    }
+}
+hassan@Hassans-MacBook-Air ~ % aws ec2 describe-route-tables \
+    --route-table-ids $RT_B_ID \
+    --query 'RouteTables[0].Routes'
+[
+    {
+        "DestinationCidrBlock": "10.0.0.0/16",
+        "Origin": "CreateRoute",
+        "State": "active",
+        "VpcPeeringConnectionId": "pcx-049bc41a4aea2c8e3"
+    },
+    {
+        "DestinationCidrBlock": "10.1.0.0/16",
+        "GatewayId": "local",
+        "Origin": "CreateRouteTable",
+        "State": "active"
+    },
+    {
+        "DestinationPrefixListId": "pl-63a5400a",
+        "GatewayId": "vpce-09ba0205ec1addee0",
+        "Origin": "CreateRoute",
+        "State": "active"
+    }
+]
+hassan@Hassans-MacBook-Air ~ % # Delete the Peering Connection
+aws ec2 delete-vpc-peering-connection --vpc-peering-connection-id $PEER_ID
+# Delete the VPCs (This automatically deletes the Route Tables and Endpoints inside them)
+aws ec2 delete-vpc --vpc-id $VPC_A_ID
+aws ec2 delete-vpc --vpc-id $VPC_B_ID
+zsh: command not found: #
+{
+    "Return": true
+}
+zsh: unknown file attribute: h
+
+An error occurred (DependencyViolation) when calling the DeleteVpc operation: The vpc 'vpc-088fd785db65580c0' has dependencies and cannot be deleted.
+hassan@Hassans-MacBook-Air ~ % ENDPOINT_ID=$(aws ec2 describe-vpc-endpoints --filters Name=vpc-id,Values=vpc-088fd785db65580c0 --query 'VpcEndpoints[0].VpcEndpointId' --output text) 
+
+aws ec2 delete-vpc-endpoints --vpc-endpoint-ids $ENDPOINT_ID
+
+aws ec2 delete-vpc --vpc-id vpc-088fd785db65580c0
+{
+    "Unsuccessful": []
+}
+hassan@Hassans-MacBook-Air ~ % 
